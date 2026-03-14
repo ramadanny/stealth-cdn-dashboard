@@ -1,4 +1,4 @@
-import app from "./src/app";
+import app from "./src/app.js";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";

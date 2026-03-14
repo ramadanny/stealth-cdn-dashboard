@@ -2,7 +2,7 @@ import { Router } from "express";
 import jwt from "jsonwebtoken";
 import { Octokit } from "@octokit/rest";
 import path from "path";
-import { config } from "../config/env";
+import { config } from "../config/env.js";
 
 const router = Router();
 const octokit = new Octokit({ auth: config.GITHUB_TOKEN });

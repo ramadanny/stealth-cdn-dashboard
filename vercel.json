@@ -5,14 +5,14 @@
       "use": "@vercel/static-build"
     },
     {
-      "src": "server.ts",
+      "src": "api/serverless.ts",
       "use": "@vercel/node"
     }
   ],
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/server.ts"
+      "destination": "/api/serverless.ts"
     },
     {
       "source": "/(.*)",
