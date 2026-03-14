@@ -12,33 +12,17 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-const JWT_SECRET = process.env.JWT_SECRET || "default_secret";
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const GITHUB_OWNER = process.env.GITHUB_OWNER;
-const GITHUB_REPO = process.env.GITHUB_REPO;
-const GITHUB_BRANCH = process.env.GITHUB_BRANCH || "main";
-
-const octokit = new Octokit({ auth: GITHUB_TOKEN });
-
-const generateUniqueName = (originalName: string) => {
-  const ext = path.extname(originalName);
-  const randomString = Math.random().toString(36).substring(2, 10) + 
-                       Math.random().toString(36).substring(2, 10);
-  return `${randomString}${ext}`;
-};
-
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: "50mb" }));
 app.use(cookieParser());
 
-const authenticate = (req: any, res: any, next: any) => {
+const authenticate = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const token = req.cookies.admin_session;
   if (!token) return res.status(401).json({ error: "Unauthorized" });
   try {
-    jwt.verify(token, JWT_SECRET);
+    jwt.verify(token, process.env.JWT_SECRET || "default_secret");
     next();
   } catch (err) {
     res.status(401).json({ error: "Invalid session" });
@@ -47,12 +31,12 @@ const authenticate = (req: any, res: any, next: any) => {
 
 app.post("/api/auth/login", (req, res) => {
   const { password } = req.body;
-  if (password === ADMIN_PASSWORD) {
-    const token = jwt.sign({ admin: true }, JWT_SECRET, { expiresIn: "7d" });
+  if (password && password === process.env.ADMIN_PASSWORD) {
+    const token = jwt.sign({ admin: true }, process.env.JWT_SECRET || "default_secret", { expiresIn: "7d" });
     res.cookie("admin_session", token, {
       httpOnly: true,
-      secure: true,
-      sameSite: "none",
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     return res.json({ success: true });
@@ -69,23 +53,33 @@ app.get("/api/auth/check", (req, res) => {
   const token = req.cookies.admin_session;
   if (!token) return res.json({ authenticated: false });
   try {
-    jwt.verify(token, JWT_SECRET);
+    jwt.verify(token, process.env.JWT_SECRET || "default_secret");
     res.json({ authenticated: true });
   } catch (err) {
     res.json({ authenticated: false });
   }
 });
 
+const getOctokit = () => new Octokit({ auth: process.env.GITHUB_TOKEN });
+
+const generateUniqueName = (originalName: string) => {
+  const ext = path.extname(originalName);
+  const randomString = Math.random().toString(36).substring(2, 10) + 
+                       Math.random().toString(36).substring(2, 10);
+  return `${randomString}${ext}`;
+};
+
 app.get("/api/files", authenticate, async (_, res) => {
-  if (!GITHUB_TOKEN || !GITHUB_OWNER || !GITHUB_REPO) {
+  if (!process.env.GITHUB_TOKEN || !process.env.GITHUB_OWNER || !process.env.GITHUB_REPO) {
     return res.status(500).json({ error: "GitHub configuration missing" });
   }
   try {
+    const octokit = getOctokit();
     const { data } = await octokit.repos.getContent({
-      owner: GITHUB_OWNER,
-      repo: GITHUB_REPO,
+      owner: process.env.GITHUB_OWNER,
+      repo: process.env.GITHUB_REPO,
       path: "",
-      ref: GITHUB_BRANCH,
+      ref: process.env.GITHUB_BRANCH || "main",
     });
 
     if (Array.isArray(data)) {
@@ -97,7 +91,7 @@ app.get("/api/files", authenticate, async (_, res) => {
           sha: item.sha,
           size: item.size,
           download_url: item.download_url,
-          cdn_url: `https://cdn.jsdelivr.net/gh/${GITHUB_OWNER}/${GITHUB_REPO}@${GITHUB_BRANCH}/${item.path}`,
+          cdn_url: `https://cdn.jsdelivr.net/gh/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}@${process.env.GITHUB_BRANCH || "main"}/${item.path}`,
         }));
       res.json(files);
     } else {
@@ -111,14 +105,15 @@ app.get("/api/files", authenticate, async (_, res) => {
 app.post("/api/upload", authenticate, async (req, res) => {
   const { name, content, message } = req.body;
   try {
+    const octokit = getOctokit();
     const uniqueName = generateUniqueName(name);
     await octokit.repos.createOrUpdateFileContents({
-      owner: GITHUB_OWNER!,
-      repo: GITHUB_REPO!,
+      owner: process.env.GITHUB_OWNER!,
+      repo: process.env.GITHUB_REPO!,
       path: uniqueName,
       message: message || `Upload ${uniqueName}`,
       content,
-      branch: GITHUB_BRANCH,
+      branch: process.env.GITHUB_BRANCH || "main",
     });
     res.json({ success: true, fileName: uniqueName });
   } catch (error: any) {
@@ -130,13 +125,14 @@ app.delete("/api/files/:path", authenticate, async (req, res) => {
   const { sha } = req.query;
   const { path: routePath } = req.params;
   try {
+    const octokit = getOctokit();
     await octokit.repos.deleteFile({
-      owner: GITHUB_OWNER!,
-      repo: GITHUB_REPO!,
+      owner: process.env.GITHUB_OWNER!,
+      repo: process.env.GITHUB_REPO!,
       path: routePath,
       message: `Delete ${routePath}`,
       sha: sha as string,
-      branch: GITHUB_BRANCH,
+      branch: process.env.GITHUB_BRANCH || "main",
     });
     res.json({ success: true });
   } catch (error: any) {
@@ -148,30 +144,31 @@ app.patch("/api/files/:path/rename", authenticate, async (req, res) => {
   const oldPath = req.params.path;
   const { newPath, sha } = req.body;
   try {
+    const octokit = getOctokit();
     const { data: fileData } = await octokit.repos.getContent({
-      owner: GITHUB_OWNER!,
-      repo: GITHUB_REPO!,
+      owner: process.env.GITHUB_OWNER!,
+      repo: process.env.GITHUB_REPO!,
       path: oldPath,
-      ref: GITHUB_BRANCH,
+      ref: process.env.GITHUB_BRANCH || "main",
     });
 
     if ("content" in fileData) {
       await octokit.repos.createOrUpdateFileContents({
-        owner: GITHUB_OWNER!,
-        repo: GITHUB_REPO!,
+        owner: process.env.GITHUB_OWNER!,
+        repo: process.env.GITHUB_REPO!,
         path: newPath,
         message: `Rename ${oldPath} to ${newPath}`,
         content: fileData.content,
-        branch: GITHUB_BRANCH,
+        branch: process.env.GITHUB_BRANCH || "main",
       });
 
       await octokit.repos.deleteFile({
-        owner: GITHUB_OWNER!,
-        repo: GITHUB_REPO!,
+        owner: process.env.GITHUB_OWNER!,
+        repo: process.env.GITHUB_REPO!,
         path: oldPath,
         message: `Cleanup after rename`,
         sha,
-        branch: GITHUB_BRANCH,
+        branch: process.env.GITHUB_BRANCH || "main",
       });
 
       res.json({ success: true });
