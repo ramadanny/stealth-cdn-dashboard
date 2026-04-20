@@ -1,0 +1,22 @@
+{
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build"
+    },
+    {
+      "src": "api/serverless.ts",
+      "use": "@vercel/node"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/serverless.ts"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
