@@ -1,4 +1,11 @@
-# GitHub CDN Dashboard
+# <div align='center'>☁️ GitHub Personal CDN Dashboard</div>
+
+<div align="center">
+
+<img src="https://cdn.jsdelivr.net/gh/ramadanny/cdn@main/github-cdn-logo.png" alt="Header Image" width="100%"/>
+
+</div>
+
 
 A simple, serverless dashboard to manage and serve files from a GitHub repository as CDN assets via the jsDelivr network. Exclusively optimized for Vercel.
 
